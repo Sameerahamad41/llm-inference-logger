@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Node
+node_modules/
+dist/
+
+# Environment
+.env
+*.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+pgdata/
+
+# Alembic
+migrations/versions/*.py
+!migrations/versions/.gitkeep
+
+# SQLite local dev database
+*.db
+dev.db
+
+# K8s secrets (never commit real keys)
+k8s/secret.yaml
