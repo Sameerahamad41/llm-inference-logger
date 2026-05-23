@@ -57,7 +57,7 @@ async def get_conversation(
     """Return a conversation with its full message history."""
     result = await db.execute(
         select(Conversation)
-        .where(Conversation.id == conversation_id)
+        .where(Conversation.id == str(conversation_id))
         .options(selectinload(Conversation.messages))
     )
     conv = result.scalar_one_or_none()
@@ -73,14 +73,14 @@ async def cancel_conversation(
 ):
     """Mark a conversation as cancelled so no further messages are accepted."""
     result = await db.execute(
-        update(Conversation)
-        .where(Conversation.id == conversation_id)
-        .values(status="cancelled")
-        .returning(Conversation)
+        select(Conversation).where(Conversation.id == str(conversation_id))
     )
     conv = result.scalar_one_or_none()
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    conv.status = "cancelled"
+    await db.flush()
+    await db.refresh(conv)
     return conv
 
 
@@ -91,14 +91,14 @@ async def resume_conversation(
 ):
     """Re-activate a cancelled conversation."""
     result = await db.execute(
-        update(Conversation)
-        .where(Conversation.id == conversation_id)
-        .values(status="active")
-        .returning(Conversation)
+        select(Conversation).where(Conversation.id == str(conversation_id))
     )
     conv = result.scalar_one_or_none()
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    conv.status = "active"
+    await db.flush()
+    await db.refresh(conv)
     return conv
 
 
@@ -109,7 +109,7 @@ async def delete_conversation(
 ):
     """Permanently delete a conversation and its messages."""
     result = await db.execute(
-        select(Conversation).where(Conversation.id == conversation_id)
+        select(Conversation).where(Conversation.id == str(conversation_id))
     )
     conv = result.scalar_one_or_none()
     if not conv:

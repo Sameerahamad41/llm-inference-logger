@@ -1,7 +1,7 @@
 """Lightweight SDK that wraps LLM provider calls and captures telemetry.
 
 Usage:
-    client = LLMClient(provider="openai", model="gpt-4.1-nano")
+    client = LLMClient(provider="groq", model="llama-3.3-70b-versatile")
     response = await client.chat(messages, conversation_id=conv_id)
 
 The SDK automatically:
@@ -18,6 +18,7 @@ from typing import AsyncIterator
 import anthropic
 import google.generativeai as genai
 import openai
+from groq import AsyncGroq
 
 from app.core.config import settings
 from app.core.events import publish
@@ -62,6 +63,8 @@ class LLMClient:
                 result = await self._call_anthropic(messages, result)
             elif self.provider == "google":
                 result = await self._call_google(messages, result)
+            elif self.provider == "groq":
+                result = await self._call_groq(messages, result)
             else:
                 raise ValueError(f"Unsupported provider: {self.provider}")
         except Exception as exc:
@@ -106,6 +109,10 @@ class LLMClient:
                     yield chunk
             elif self.provider == "google":
                 async for chunk in self._stream_google(messages):
+                    full_content += chunk
+                    yield chunk
+            elif self.provider == "groq":
+                async for chunk in self._stream_groq(messages):
                     full_content += chunk
                     yield chunk
             else:
@@ -179,6 +186,20 @@ class LLMClient:
             result["total_tokens"] = response.usage_metadata.total_token_count
         return result
 
+    async def _call_groq(self, messages: list[dict], result: dict) -> dict:
+        client = AsyncGroq(api_key=settings.GROQ_API_KEY)
+        response = await client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+        )
+        choice = response.choices[0]
+        result["content"] = choice.message.content or ""
+        if response.usage:
+            result["input_tokens"] = response.usage.prompt_tokens
+            result["output_tokens"] = response.usage.completion_tokens
+            result["total_tokens"] = response.usage.total_tokens
+        return result
+
     # ── Streaming implementations ─────────────────────────────────
 
     async def _stream_openai(self, messages: list[dict]) -> AsyncIterator[str]:
@@ -226,6 +247,18 @@ class LLMClient:
         for chunk in response:
             if chunk.text:
                 yield chunk.text
+
+    async def _stream_groq(self, messages: list[dict]) -> AsyncIterator[str]:
+        client = AsyncGroq(api_key=settings.GROQ_API_KEY)
+        stream = await client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            stream=True,
+        )
+        async for chunk in stream:
+            delta = chunk.choices[0].delta if chunk.choices else None
+            if delta and delta.content:
+                yield delta.content
 
     # ── Telemetry emission ────────────────────────────────────────
 

@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: llm-logger
+data:
+  DEFAULT_PROVIDER: "groq"
+  DEFAULT_MODEL: "llama-3.3-70b-versatile"
+  PII_REDACTION_ENABLED: "true"
+  DATABASE_URL: "postgresql+asyncpg://postgres:postgres@postgres:5432/inference_logger"
+  DATABASE_URL_SYNC: "postgresql://postgres:postgres@postgres:5432/inference_logger"

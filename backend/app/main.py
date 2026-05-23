@@ -93,4 +93,16 @@ async def list_providers():
             "name": "Google",
             "models": ["gemini-2.0-flash", "gemini-2.5-flash-preview-05-20"],
         })
+    if settings.GROQ_API_KEY:
+        providers.append({
+            "id": "groq",
+            "name": "Groq",
+            "models": [
+                "llama-3.3-70b-versatile",
+                "llama-3.1-8b-instant",
+                "llama3-70b-8192",
+                "mixtral-8x7b-32768",
+                "gemma2-9b-it",
+            ],
+        })
     return {"providers": providers, "default_provider": settings.DEFAULT_PROVIDER, "default_model": settings.DEFAULT_MODEL}

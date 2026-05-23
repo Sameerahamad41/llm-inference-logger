@@ -11,7 +11,6 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -22,7 +21,7 @@ class Conversation(Base):
 
     __tablename__ = "conversations"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     title = Column(String(256), nullable=False, default="New Conversation")
     status = Column(
         SAEnum("active", "cancelled", "completed", name="conversation_status"),
@@ -61,9 +60,9 @@ class Message(Base):
 
     __tablename__ = "messages"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     conversation_id = Column(
-        UUID(as_uuid=True),
+        String(36),
         ForeignKey("conversations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,

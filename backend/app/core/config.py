@@ -16,10 +16,11 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
     GOOGLE_API_KEY: str = ""
+    GROQ_API_KEY: str = ""
 
     # --- Default model selection ---
-    DEFAULT_PROVIDER: str = "openai"
-    DEFAULT_MODEL: str = "gpt-4.1-nano"
+    DEFAULT_PROVIDER: str = "groq"
+    DEFAULT_MODEL: str = "llama-3.3-70b-versatile"
 
     # --- Ingestion ---
     INGESTION_BATCH_SIZE: int = 50

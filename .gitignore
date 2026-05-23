@@ -30,3 +30,10 @@ pgdata/
 # Alembic
 migrations/versions/*.py
 !migrations/versions/.gitkeep
+
+# SQLite local dev database
+*.db
+dev.db
+
+# K8s secrets (never commit real keys)
+k8s/secret.yaml

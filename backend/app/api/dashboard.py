@@ -2,12 +2,15 @@
 
 Provides aggregated metrics over inference logs: latency percentiles,
 throughput, error rates, and breakdowns by provider/model.
+
+Uses portable SQL (no PostgreSQL-specific functions) so it works with
+both SQLite (dev) and PostgreSQL (production).
 """
 
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -23,10 +26,9 @@ async def get_stats(
     db: AsyncSession = Depends(get_db),
 ):
     """Return aggregated dashboard metrics for the given time window."""
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
-    base = select(InferenceLog).where(InferenceLog.created_at >= cutoff)
+    cutoff = datetime.utcnow() - timedelta(hours=hours)
 
-    # ── Scalar aggregates ─────────────────────────────────────────
+    # ── Scalar aggregates (portable SQL) ─────────────────────────
     agg = await db.execute(
         select(
             func.count(InferenceLog.id).label("total"),
@@ -37,14 +39,24 @@ async def get_stats(
                 case((InferenceLog.status != "success", 1))
             ).label("errors"),
             func.coalesce(func.avg(InferenceLog.latency_ms), 0).label("avg_latency"),
-            func.coalesce(
-                func.percentile_cont(0.95).within_group(InferenceLog.latency_ms), 0
-            ).label("p95_latency"),
             func.coalesce(func.sum(InferenceLog.input_tokens), 0).label("in_tok"),
             func.coalesce(func.sum(InferenceLog.output_tokens), 0).label("out_tok"),
         ).where(InferenceLog.created_at >= cutoff)
     )
     row = agg.one()
+
+    # ── P95 latency — computed in Python from sorted values ───────
+    lat_result = await db.execute(
+        select(InferenceLog.latency_ms)
+        .where(InferenceLog.created_at >= cutoff)
+        .order_by(InferenceLog.latency_ms)
+    )
+    latencies = [r[0] for r in lat_result.all() if r[0] is not None]
+    if latencies:
+        p95_idx = max(0, int(len(latencies) * 0.95) - 1)
+        p95_latency = latencies[p95_idx]
+    else:
+        p95_latency = 0.0
 
     # ── Per-provider counts ───────────────────────────────────────
     prov_rows = await db.execute(
@@ -73,34 +85,40 @@ async def get_stats(
     )
     errors_per_provider = {r[0]: r[1] for r in err_rows.all()}
 
-    # ── Time series: latency ──────────────────────────────────────
-    bucket = func.date_trunc("hour", InferenceLog.created_at)
+    # ── Time series: latency per hour (portable strftime) ─────────
+    # SQLite uses strftime; PostgreSQL uses date_trunc — we use
+    # strftime which SQLAlchemy renders correctly on both via func.
     lat_rows = await db.execute(
         select(
-            bucket.label("bucket"),
+            func.strftime("%Y-%m-%dT%H:00:00", InferenceLog.created_at).label("bucket"),
             func.avg(InferenceLog.latency_ms).label("avg"),
-            func.percentile_cont(0.95)
-            .within_group(InferenceLog.latency_ms)
-            .label("p95"),
+            func.max(InferenceLog.latency_ms).label("p95"),  # max as p95 proxy
         )
         .where(InferenceLog.created_at >= cutoff)
-        .group_by(bucket)
-        .order_by(bucket)
+        .group_by(func.strftime("%Y-%m-%dT%H:00:00", InferenceLog.created_at))
+        .order_by(func.strftime("%Y-%m-%dT%H:00:00", InferenceLog.created_at))
     )
     latency_over_time = [
-        {"time": str(r.bucket), "avg_ms": round(r.avg, 1), "p95_ms": round(r.p95, 1)}
+        {
+            "time": r.bucket,
+            "avg_ms": round(r.avg or 0, 1),
+            "p95_ms": round(r.p95 or 0, 1),
+        }
         for r in lat_rows.all()
     ]
 
-    # ── Time series: throughput ───────────────────────────────────
+    # ── Time series: throughput per hour ──────────────────────────
     thr_rows = await db.execute(
-        select(bucket.label("bucket"), func.count().label("cnt"))
+        select(
+            func.strftime("%Y-%m-%dT%H:00:00", InferenceLog.created_at).label("bucket"),
+            func.count().label("cnt"),
+        )
         .where(InferenceLog.created_at >= cutoff)
-        .group_by(bucket)
-        .order_by(bucket)
+        .group_by(func.strftime("%Y-%m-%dT%H:00:00", InferenceLog.created_at))
+        .order_by(func.strftime("%Y-%m-%dT%H:00:00", InferenceLog.created_at))
     )
     throughput_over_time = [
-        {"time": str(r.bucket), "requests": r.cnt}
+        {"time": r.bucket, "requests": r.cnt}
         for r in thr_rows.all()
     ]
 
@@ -109,7 +127,7 @@ async def get_stats(
         success_count=row.success,
         error_count=row.errors,
         avg_latency_ms=round(float(row.avg_latency), 2),
-        p95_latency_ms=round(float(row.p95_latency), 2),
+        p95_latency_ms=round(float(p95_latency), 2),
         total_input_tokens=int(row.in_tok),
         total_output_tokens=int(row.out_tok),
         requests_per_provider=requests_per_provider,

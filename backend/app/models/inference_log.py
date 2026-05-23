@@ -9,10 +9,10 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    JSON,
     String,
     Text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -28,15 +28,15 @@ class InferenceLog(Base):
 
     __tablename__ = "inference_logs"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     conversation_id = Column(
-        UUID(as_uuid=True),
+        String(36),
         ForeignKey("conversations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     message_id = Column(
-        UUID(as_uuid=True),
+        String(36),
         ForeignKey("messages.id", ondelete="SET NULL"),
         nullable=True,
     )
@@ -60,7 +60,7 @@ class InferenceLog(Base):
     output_preview = Column(String(500), nullable=True)
 
     # Flexible metadata bag for provider-specific fields
-    metadata_ = Column("metadata", JSONB, nullable=True)
+    metadata_ = Column("metadata", JSON, nullable=True)
 
     created_at = Column(
         DateTime(timezone=True),

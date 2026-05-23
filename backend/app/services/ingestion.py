@@ -31,17 +31,9 @@ async def handle_inference_completed(payload: dict) -> None:
         return
 
     row = {
-        "id": uuid.uuid4(),
-        "conversation_id": (
-            uuid.UUID(payload["conversation_id"])
-            if payload.get("conversation_id")
-            else None
-        ),
-        "message_id": (
-            uuid.UUID(payload["message_id"])
-            if payload.get("message_id")
-            else None
-        ),
+        "id": str(uuid.uuid4()),
+        "conversation_id": payload.get("conversation_id"),
+        "message_id": payload.get("message_id"),
         "provider": payload["provider"],
         "model": payload["model"],
         "latency_ms": payload["latency_ms"],
@@ -52,8 +44,7 @@ async def handle_inference_completed(payload: dict) -> None:
         "error_message": payload.get("error_message"),
         "input_preview": payload.get("input_preview"),
         "output_preview": payload.get("output_preview"),
-        "metadata": payload.get("metadata"),
-        "created_at": datetime.now(timezone.utc),
+        "created_at": datetime.now(timezone.utc).replace(tzinfo=None),
     }
 
     async with async_session_factory() as session:

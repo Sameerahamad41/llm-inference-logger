@@ -146,7 +146,7 @@ async def _get_active_conversation(
 ) -> Conversation:
     result = await db.execute(
         select(Conversation)
-        .where(Conversation.id == conversation_id)
+        .where(Conversation.id == str(conversation_id))
         .options(selectinload(Conversation.messages))
     )
     conv = result.scalar_one_or_none()
